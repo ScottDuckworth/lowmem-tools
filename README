@@ -1,0 +1,18 @@
+lowmem-tools provides alternative implementations of ls and rm which can
+gracefully handle directories containing a very large number of files.
+
+Standard GNU/Linux file systems and utilities don't gracefully handle
+directories containing thousands or millions of files under certain conditions.
+A well written program will try to limit the number of files per directory to
+something that is manageable, but not all programs are well written.  When a
+program creates too many files in a directory to be manageable, it is sometimes
+difficult to clean up the mess since even utilities like ls and rm get bogged
+down.
+
+The problem is due to how glibc implements readdir() - it reads the entire
+contents of the directory into memory before returning the first result.  With
+very large directories, this can take a long time and even exhaust the system's
+memory, causing ls or rm to crash and slow the system to a crawl.
+
+The underlying system call used by readdir(), getdents(), does not suffer from
+this behavior.  ls-lowmem and rm-lowmem use getdents().
