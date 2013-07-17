@@ -7,11 +7,13 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <linux/version.h>
 
 #define handle_error(msg) \
   do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
-#define BUF_SIZE 32768
+#define ERROR_SIZE 4096
+#define GETDENTS_BUF_SIZE 32768
 
 struct linux_dirent {
   unsigned long  d_ino;
@@ -20,41 +22,78 @@ struct linux_dirent {
   char           d_name[];
 };
 
-int main(int argc, char *argv[]) {
-  int fd, nread;
-  char buf[BUF_SIZE];
-  char message[BUF_SIZE];
+static char error_message[ERROR_SIZE];
+
+static int unlink_recursive(const char *dirname) {
+  int fd, nread, bpos, rc=0;
   struct linux_dirent *d;
-  int bpos, i;
+  char buf[GETDENTS_BUF_SIZE];
+  char path[PATH_MAX];
+
+  fd = open(dirname, O_RDONLY | O_DIRECTORY);
+  if(fd == -1) {
+    perror(dirname);
+    return 1;
+  }
+
+  for(;;) {
+    nread = syscall(SYS_getdents, fd, buf, sizeof(buf));
+    if(nread == -1) {
+      snprintf(error_message, sizeof(error_message), "getdents failed on %s", dirname);
+      rc = 1;
+      goto out;
+    }
+    if(nread == 0)
+      break;
+
+    for(bpos = 0; bpos < nread; bpos += d->d_reclen) {
+      d = (struct linux_dirent *)(buf + bpos);
+      if(strcmp(".", d->d_name) == 0 || strcmp("..", d->d_name) == 0)
+        continue;
+      snprintf(path, sizeof(path), "%s/%s", dirname, d->d_name);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,4)
+      int is_dir = *(((char *) d) + d->d_reclen - 1) == DT_DIR;
+#else
+      struct stat st;
+      if(stat(path, &st) == -1) {
+        perror(path);
+        rc = 1;
+        continue;
+      }
+      int is_dir = S_ISDIR(st.st_mode);
+#endif
+      if(is_dir) {
+        unlink_recursive(path);
+      } else {
+        if(unlinkat(fd, d->d_name, 0) == -1) {
+          perror(path);
+          rc = 1;
+        }
+      }
+    }
+  }
+
+out:
+  if(close(fd) == -1) {
+    perror(dirname);
+    rc = 1;
+  }
+  if(rc == 0 && rmdir(dirname) == -1) {
+    perror(dirname);
+    rc = 1;
+  }
+
+  return rc;
+}
+
+int main(int argc, char *argv[]) {
+  int i, fail=0;
   const char *dirname;
 
   for(i = 1; i < argc; ++i) {
     dirname = argv[i];
-    fd = open(dirname, O_RDONLY | O_DIRECTORY);
-    if(fd == -1)
-      handle_error(dirname);
-
-    for(;;) {
-      nread = syscall(SYS_getdents, fd, buf, BUF_SIZE);
-      if(nread == -1)
-        handle_error(dirname);
-      if(nread == 0)
-        break;
-
-      for(bpos = 0; bpos < nread; bpos += d->d_reclen) {
-        d = (struct linux_dirent *)(buf + bpos);
-        if(strcmp(".", d->d_name) == 0 || strcmp("..", d->d_name) == 0)
-          continue;
-        if(unlinkat(fd, d->d_name, 0) == -1) {
-          snprintf(message, sizeof(message), "cannot unlink %s/%s", dirname, d->d_name);
-          perror(message);
-        }
-      }
-    }
-
-    if(close(fd) == -1)
-      handle_error(dirname);
+    fail |= unlink_recursive(dirname);
   }
 
-  exit(EXIT_SUCCESS);
+  exit(fail ? EXIT_FAILURE : EXIT_SUCCESS);
 }
