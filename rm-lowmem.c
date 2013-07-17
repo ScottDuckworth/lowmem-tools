@@ -9,9 +9,6 @@
 #include <sys/syscall.h>
 #include <linux/version.h>
 
-#define handle_error(msg) \
-  do { perror(msg); exit(EXIT_FAILURE); } while (0)
-
 #define ERROR_SIZE 4096
 #define GETDENTS_BUF_SIZE 32768
 
