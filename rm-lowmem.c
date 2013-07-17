@@ -22,6 +22,8 @@ struct linux_dirent {
   char           d_name[];
 };
 
+static int verbose = 0;
+static int filesonly = 0;
 static char error_message[ERROR_SIZE];
 
 static int unlink_recursive(const char *dirname) {
@@ -63,8 +65,11 @@ static int unlink_recursive(const char *dirname) {
       int is_dir = S_ISDIR(st.st_mode);
 #endif
       if(is_dir) {
-        unlink_recursive(path);
+        if(!filesonly)
+          unlink_recursive(path);
       } else {
+        if(verbose)
+          printf("removing %s\n", path);
         if(unlinkat(fd, d->d_name, 0) == -1) {
           perror(path);
           rc = 1;
@@ -78,19 +83,48 @@ out:
     perror(dirname);
     rc = 1;
   }
-  if(rc == 0 && rmdir(dirname) == -1) {
-    perror(dirname);
-    rc = 1;
+  if(!filesonly && rc == 0) {
+    if(verbose)
+      printf("removing %s/\n", dirname);
+    if(rmdir(dirname) == -1) {
+      perror(dirname);
+      rc = 1;
+    }
   }
 
   return rc;
 }
 
 int main(int argc, char *argv[]) {
-  int i, fail=0;
+  int i, opt, fail=0;
   const char *dirname;
 
-  for(i = 1; i < argc; ++i) {
+  while((opt = getopt(argc, argv, "vf")) != -1) {
+    switch(opt) {
+    case 'v':
+      verbose = 1;
+      break;
+    case 'f':
+      filesonly = 1;
+      break;
+    default:
+usage:
+      fprintf(stderr, "\
+Usage: %s [-v] [-f] directory ...\n\
+Options:\n\
+  -v  Be verbose\n\
+  -f  Only remove files, do not recurse into subdirectories\n",
+        argv[0]);
+      exit(EXIT_FAILURE);
+    }
+  }
+
+  if(optind >= argc) {
+    fprintf(stderr, "%s: missing operand\n", argv[0]);
+    goto usage;
+  }
+
+  for(i = optind; i < argc; ++i) {
     dirname = argv[i];
     fail |= unlink_recursive(dirname);
   }
