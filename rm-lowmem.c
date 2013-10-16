@@ -1,4 +1,6 @@
 /*
+ * Copyright 2013 Clemson University
+ *
  * This file is part of lowmem-tools.
  *
  * lowmem-tools is free software: you can redistribute it and/or modify
