@@ -1,4 +1,6 @@
 /*
+ * Copyright 2013 Clemson University
+ *
  * This file is part of lowmem-tools.
  *
  * lowmem-tools is free software: you can redistribute it and/or modify
@@ -25,6 +27,7 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <linux/version.h>
+#include "version.h"
 
 #define ERROR_SIZE 4096
 #define GETDENTS_BUF_SIZE 32768
@@ -39,6 +42,17 @@ struct linux_dirent {
 static int verbose = 0;
 static int filesonly = 0;
 static char error_message[ERROR_SIZE];
+
+static void usage(FILE *file, const char *arg0) {
+  fprintf(file,
+    "Usage: %s [options] directory ...\n"
+    "Options:\n"
+    "  -h  Print this message\n"
+    "  -V  Print version\n"
+    "  -v  Be verbose\n"
+    "  -f  Only remove files, do not recurse into subdirectories\n"
+    , arg0);
+}
 
 static int unlink_recursive(const char *dirname) {
   int fd, nread, bpos, rc=0;
@@ -113,8 +127,14 @@ int main(int argc, char *argv[]) {
   int i, opt, fail=0;
   const char *dirname;
 
-  while((opt = getopt(argc, argv, "vf")) != -1) {
+  while((opt = getopt(argc, argv, "hVvf")) != -1) {
     switch(opt) {
+    case 'h':
+      usage(stdout, argv[0]);
+      exit(0);
+    case 'V':
+      printf("rm-lowmem (lowmem-tools) " VERSION "\n");
+      exit(0);
     case 'v':
       verbose = 1;
       break;
@@ -122,20 +142,15 @@ int main(int argc, char *argv[]) {
       filesonly = 1;
       break;
     default:
-usage:
-      fprintf(stderr, "\
-Usage: %s [-v] [-f] directory ...\n\
-Options:\n\
-  -v  Be verbose\n\
-  -f  Only remove files, do not recurse into subdirectories\n",
-        argv[0]);
-      exit(EXIT_FAILURE);
+      usage(stderr, argv[0]);
+      exit(1);
     }
   }
 
-  if(optind >= argc) {
+  if(optind == argc) {
     fprintf(stderr, "%s: missing operand\n", argv[0]);
-    goto usage;
+    usage(stderr, argv[0]);
+    exit(1);
   }
 
   for(i = optind; i < argc; ++i) {

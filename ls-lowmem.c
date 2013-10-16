@@ -1,4 +1,6 @@
 /*
+ * Copyright 2013 Clemson University
+ *
  * This file is part of lowmem-tools.
  *
  * lowmem-tools is free software: you can redistribute it and/or modify
@@ -23,6 +25,7 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include "version.h"
 
 #define ERROR_SIZE 4096
 #define GETDENTS_BUF_SIZE 32768
@@ -35,6 +38,15 @@ struct linux_dirent {
 };
 
 static char error_message[ERROR_SIZE];
+
+static void usage(FILE *file, const char *arg0) {
+  fprintf(file,
+    "Usage: %s [options] [directory] ...\n"
+    "Options:\n"
+    "  -h  Print this message\n"
+    "  -V  Print version\n"
+    , arg0);
+}
 
 static int ls_lowmem(const char *dirname) {
   int fd, nread, bpos, rc=0;
@@ -73,13 +85,27 @@ out:
 }
 
 int main(int argc, char *argv[]) {
-  int i, fail=0;
+  int i, opt, fail=0;
   const char *dirname;
 
-  if(argc == 1) {
+  while((opt = getopt(argc, argv, "hV")) != -1) {
+    switch(opt) {
+    case 'h':
+      usage(stdout, argv[0]);
+      exit(0);
+    case 'V':
+      printf("ls-lowmem (lowmem-tools) " VERSION "\n");
+      exit(0);
+    default:
+      usage(stderr, argv[0]);
+      exit(1);
+    }
+  }
+
+  if(optind == argc) {
     ls_lowmem(".");
   } else {
-    for(i = 1; i < argc; ++i) {
+    for(i = optind; i < argc; ++i) {
       dirname = argv[i];
       if(argc > 2) {
         printf("%s:\n", dirname);
